@@ -20,7 +20,14 @@ export class ProjectsController {
   @Public()
   @Get()
   findAll(@Query('page') page?: string, @Query('limit') limit?: string) {
-    return this.projectsService.findAll(Number(page) || 1, Number(limit) || 10);
+    const p = Math.max(Number(page) || 1, 1);
+    const l = Math.min(Math.max(Number(limit) || 50, 1), 100);
+    return this.projectsService.findAll(p, l);
+  }
+
+  @Get('admin/all') // tanpa @Public, jadi butuh token
+  findAllAdmin() {
+    return this.projectsService.findAllAdmin();
   }
 
   @Public()
