@@ -1,29 +1,28 @@
 import { Module } from '@nestjs/common';
-import { JwtModule, JwtSignOptions } from '@nestjs/jwt';
+import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { APP_GUARD } from '@nestjs/core';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
-
-type JwtExpiresIn = NonNullable<JwtSignOptions['expiresIn']>;
+import { CsrfGuard } from '../common/guards/csrf.guard';
+import { MailModule } from '../mail/mail.module';
+import { GoogleStrategy } from './strategys/google.strategy';
 
 @Module({
   imports: [
     PassportModule,
-    JwtModule.register({
-      secret: process.env.JWT_SECRET,
-      signOptions: {
-        expiresIn: (process.env.JWT_EXPIRES_IN ?? '7d') as JwtExpiresIn,
-      },
-    }),
+    MailModule,
+    JwtModule.register({ secret: process.env.JWT_SECRET }),
   ],
   controllers: [AuthController],
   providers: [
     AuthService,
     JwtStrategy,
+    GoogleStrategy,
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: CsrfGuard },
   ],
 })
 export class AuthModule {}
