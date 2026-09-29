@@ -19,4 +19,14 @@ export class MailService {
       text: data.message,
     });
   }
+
+  async sendPasswordResetEmail(to: string, rawToken: string) {
+    const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${rawToken}`;
+    await this.resend.emails.send({
+      from: 'Portfolio Admin <onboarding@resend.dev>',
+      to,
+      subject: 'Reset your admin password',
+      text: `Click the link below to reset your password. This link expires in 30 minutes.\n\n${resetUrl}\n\nIf you didn't request this, you can ignore this email.`,
+    });
+  }
 }
