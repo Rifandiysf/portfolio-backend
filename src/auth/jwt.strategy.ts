@@ -1,18 +1,38 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
+import type { Request } from 'express';
 import { ExtractJwt, Strategy } from 'passport-jwt';
+import { PrismaService } from '../prisma/prisma.service';
+
+interface JwtPayload {
+  sub: string;
+  email: string;
+  v: number;
+}
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor() {
+  constructor(private prisma: PrismaService) {
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      jwtFromRequest: ExtractJwt.fromExtractors([
+        (req: Request): string | null => {
+          const cookies = req.cookies as
+            Record<string, string | undefined> | undefined;
+          return cookies?.access_token ?? null;
+        },
+      ]),
       ignoreExpiration: false,
       secretOrKey: process.env.JWT_SECRET!,
     });
   }
 
-  validate(payload: { sub: string; email: string }) {
-    return { userId: payload.sub, email: payload.email };
+  async validate(payload: JwtPayload) {
+    const admin = await this.prisma.admin.findUnique({
+      where: { id: payload.sub },
+    });
+    if (!admin || admin.tokenVersion !== payload.v) {
+      throw new UnauthorizedException('Session expired');
+    }
+    return { userId: admin.id, email: admin.email };
   }
 }
