@@ -12,6 +12,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { LoginDto } from './dto/login.dto';
 import { Admin } from '../../prisma/generated/prisma/client';
+import { ChangePasswordDto } from './dto/change-password';
 
 interface TokenPayload {
   sub: string;
@@ -145,14 +146,45 @@ export class AuthService {
     return { message: 'Password has been reset. Please log in again.' };
   }
 
-  async validateGoogleUser(email: string): Promise<Admin> {
+  async changePassword(adminId: string, dto: ChangePasswordDto, res: Response) {
     const admin = await this.prisma.admin.findUnique({
-      where: { email: normalizeEmail(email) },
+      where: { id: adminId },
+    });
+    if (!admin) throw new UnauthorizedException();
+
+    const valid = await bcrypt.compare(dto.currentPassword, admin.password);
+    if (!valid)
+      throw new UnauthorizedException('Current password is incorrect');
+
+    const hashedPassword = await bcrypt.hash(dto.newPassword, 10);
+    const updated = await this.prisma.admin.update({
+      where: { id: admin.id },
+      data: { password: hashedPassword, tokenVersion: { increment: 1 } },
+    });
+
+    this.issueTokens(updated, res);
+    return { message: 'Password updated' };
+  }
+
+  async validateGoogleUser(data: {
+    email: string;
+    name?: string;
+    avatarUrl?: string;
+  }): Promise<Admin> {
+    const admin = await this.prisma.admin.findUnique({
+      where: { email: normalizeEmail(data.email) },
     });
     if (!admin) {
       throw new ForbiddenException('This Google account is not authorized');
     }
-    return admin;
+
+    return this.prisma.admin.update({
+      where: { id: admin.id },
+      data: {
+        name: data.name ?? admin.name,
+        avatarUrl: data.avatarUrl ?? admin.avatarUrl,
+      },
+    });
   }
 
   googleLogin(admin: Admin, res: Response) {

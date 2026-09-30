@@ -22,12 +22,15 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     done: VerifyCallback,
   ): Promise<void> {
     const email = profile.emails?.[0]?.value;
-    const verified = profile.emails?.[0]?.verified;
-    if (!email || verified === false) return done(null, false);
+    if (!email) return done(null, false);
 
     let admin: Admin;
     try {
-      admin = await this.authService.validateGoogleUser(email);
+      admin = await this.authService.validateGoogleUser({
+        email,
+        name: profile.displayName || undefined,
+        avatarUrl: profile.photos?.[0]?.value,
+      });
     } catch {
       return done(null, false);
     }

@@ -48,6 +48,8 @@ model Experience {
 model Admin {
   id               String    @id @default(cuid())
   email            String    @unique
+  name             String?
+  avatarUrl        String?
   password         String
   tokenVersion     Int       @default(0)
   resetToken       String?

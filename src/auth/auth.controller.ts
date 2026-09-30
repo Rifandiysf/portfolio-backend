@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Patch,
   Post,
   Req,
   Res,
@@ -16,6 +17,8 @@ import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { ForgotPasswordDto } from './dto/forgot-password';
 import { ResetPasswordDto } from './dto/reset-password';
 import type { Admin } from '../../prisma/generated/prisma/client';
+import { ChangePasswordDto } from './dto/change-password';
+import { AuthUser } from 'types/auth';
 
 @Controller('auth')
 export class AuthController {
@@ -55,10 +58,20 @@ export class AuthController {
     return this.authService.resetPassword(dto.token, dto.password);
   }
 
+  @Patch('change-password')
+  changePassword(
+    @Req() req: Request,
+    @Body() dto: ChangePasswordDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { userId } = req.user as { userId: string };
+    return this.authService.changePassword(userId, dto, res);
+  }
+
   @Get('me')
   me(@Req() req: Request) {
-    const { userId, email } = req.user as { userId: string; email: string };
-    return { id: userId, email };
+    const { userId, email, name, avatarUrl } = req.user as AuthUser;
+    return { id: userId, email, name, avatarUrl };
   }
 
   @Public()
