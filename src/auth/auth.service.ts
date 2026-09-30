@@ -13,12 +13,7 @@ import { MailService } from '../mail/mail.service';
 import { LoginDto } from './dto/login.dto';
 import { Admin } from '../../prisma/generated/prisma/client';
 import { ChangePasswordDto } from './dto/change-password';
-
-interface TokenPayload {
-  sub: string;
-  email: string;
-  v: number;
-}
+import { TokenPayload } from 'types/auth';
 
 const ACCESS_TTL_MS = 15 * 60 * 1000;
 const REFRESH_TTL_MS = 7 * 24 * 60 * 60 * 1000;
