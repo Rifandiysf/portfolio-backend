@@ -12,6 +12,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
+
+    if (response.headersSent) {
+      console.error('Exception after headers sent:', exception);
+      return;
+    }
+
     const status =
       exception instanceof HttpException
         ? exception.getStatus()

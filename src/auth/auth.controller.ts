@@ -57,8 +57,8 @@ export class AuthController {
 
   @Get('me')
   me(@Req() req: Request) {
-    const { id, email } = req.user as Admin;
-    return { id, email };
+    const { userId, email } = req.user as { userId: string; email: string };
+    return { id: userId, email };
   }
 
   @Public()
@@ -70,8 +70,13 @@ export class AuthController {
   @UseGuards(GoogleAuthGuard)
   @Get('google/callback')
   googleCallback(@Req() req: Request, @Res() res: Response) {
-    if (!req.user) return;
+    if (!req.user) {
+      return res.redirect(
+        `${process.env.FRONTEND_URL}/login?error=unauthorized`,
+      );
+    }
+
     this.authService.googleLogin(req.user as Admin, res);
-    res.redirect(`${process.env.FRONTEND_URL}/admin`);
+    return res.redirect(`${process.env.FRONTEND_URL}/admin`);
   }
 }

@@ -5,7 +5,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { Request, Response } from 'express';
+import type { CookieOptions, Request, Response } from 'express';
 import * as bcrypt from 'bcrypt';
 import { randomBytes, createHash } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -13,21 +13,45 @@ import { MailService } from '../mail/mail.service';
 import { LoginDto } from './dto/login.dto';
 import { Admin } from '../../prisma/generated/prisma/client';
 
-const isProd = process.env.NODE_ENV === 'production';
+interface TokenPayload {
+  sub: string;
+  email: string;
+  v: number;
+}
+
+const ACCESS_TTL_MS = 15 * 60 * 1000;
+const REFRESH_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
 @Injectable()
 export class AuthService {
+  private readonly refreshSecret: string;
+  private readonly baseCookie: CookieOptions;
+
   constructor(
     private prisma: PrismaService,
     private jwt: JwtService,
     private mail: MailService,
-  ) {}
+  ) {
+    const refreshSecret = process.env.JWT_REFRESH_SECRET;
+    if (!refreshSecret) {
+      throw new Error('JWT_REFRESH_SECRET is not set');
+    }
+    this.refreshSecret = refreshSecret;
+
+    this.baseCookie = {
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+    };
+  }
 
   async login(dto: LoginDto, res: Response) {
     const admin = await this.prisma.admin.findUnique({
-      where: { email: dto.email },
+      where: { email: normalizeEmail(dto.email) },
     });
     if (!admin) throw new UnauthorizedException('Invalid credentials');
+
     const valid = await bcrypt.compare(dto.password, admin.password);
     if (!valid) throw new UnauthorizedException('Invalid credentials');
 
@@ -41,10 +65,10 @@ export class AuthService {
     const token = cookies?.refresh_token;
     if (!token) throw new UnauthorizedException('No refresh token');
 
-    let payload: { sub: string; v: number };
+    let payload: TokenPayload;
     try {
-      payload = this.jwt.verify<{ sub: string; v: number }>(token, {
-        secret: process.env.JWT_REFRESH_SECRET,
+      payload = this.jwt.verify<TokenPayload>(token, {
+        secret: this.refreshSecret,
       });
     } catch {
       throw new UnauthorizedException('Session expired');
@@ -53,21 +77,37 @@ export class AuthService {
     const admin = await this.prisma.admin.findUnique({
       where: { id: payload.sub },
     });
-    if (!admin || admin.tokenVersion !== payload.v)
+    if (!admin || admin.tokenVersion !== payload.v) {
       throw new UnauthorizedException('Session expired');
+    }
 
     this.issueTokens(admin, res);
     return { email: admin.email };
   }
 
   logout(res: Response) {
-    res.clearCookie('access_token', { path: '/' });
-    res.clearCookie('refresh_token', { path: '/auth' });
-    res.clearCookie('csrf_token', { path: '/' });
+    res.clearCookie('access_token', {
+      ...this.baseCookie,
+      httpOnly: true,
+      path: '/',
+    });
+    res.clearCookie('refresh_token', {
+      ...this.baseCookie,
+      httpOnly: true,
+      path: '/auth',
+    });
+    res.clearCookie('csrf_token', {
+      ...this.baseCookie,
+      httpOnly: false,
+      path: '/',
+    });
   }
 
   async forgotPassword(email: string) {
-    const admin = await this.prisma.admin.findUnique({ where: { email } });
+    const admin = await this.prisma.admin.findUnique({
+      where: { email: normalizeEmail(email) },
+    });
+
     if (admin) {
       const rawToken = randomBytes(32).toString('hex');
       const hashed = createHash('sha256').update(rawToken).digest('hex');
@@ -80,6 +120,7 @@ export class AuthService {
       });
       await this.mail.sendPasswordResetEmail(admin.email, rawToken);
     }
+
     return { message: 'If that email exists, a reset link has been sent.' };
   }
 
@@ -100,13 +141,17 @@ export class AuthService {
         tokenVersion: { increment: 1 },
       },
     });
+
     return { message: 'Password has been reset. Please log in again.' };
   }
 
   async validateGoogleUser(email: string): Promise<Admin> {
-    const admin = await this.prisma.admin.findUnique({ where: { email } });
-    if (!admin)
+    const admin = await this.prisma.admin.findUnique({
+      where: { email: normalizeEmail(email) },
+    });
+    if (!admin) {
       throw new ForbiddenException('This Google account is not authorized');
+    }
     return admin;
   }
 
@@ -115,37 +160,35 @@ export class AuthService {
   }
 
   private issueTokens(admin: Admin, res: Response) {
-    const payload = {
+    const payload: TokenPayload = {
       sub: admin.id,
       email: admin.email,
       v: admin.tokenVersion,
     };
+
     const accessToken = this.jwt.sign(payload, { expiresIn: '15m' });
     const refreshToken = this.jwt.sign(payload, {
       expiresIn: '7d',
-      secret: process.env.JWT_REFRESH_SECRET,
+      secret: this.refreshSecret,
     });
 
     res.cookie('access_token', accessToken, {
+      ...this.baseCookie,
       httpOnly: true,
-      secure: isProd,
-      sameSite: 'lax',
-      maxAge: 15 * 60 * 1000,
       path: '/',
+      maxAge: ACCESS_TTL_MS,
     });
     res.cookie('refresh_token', refreshToken, {
+      ...this.baseCookie,
       httpOnly: true,
-      secure: isProd,
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
       path: '/auth',
+      maxAge: REFRESH_TTL_MS,
     });
     res.cookie('csrf_token', randomBytes(24).toString('hex'), {
+      ...this.baseCookie,
       httpOnly: false,
-      secure: isProd,
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
       path: '/',
+      maxAge: REFRESH_TTL_MS,
     });
   }
 }

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { Profile, Strategy, VerifyCallback } from 'passport-google-oauth20';
 import { AuthService } from '../auth.service';
+import { Admin } from '../../../prisma/generated/prisma/client';
 
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
@@ -20,14 +21,17 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     profile: Profile,
     done: VerifyCallback,
   ): Promise<void> {
-    try {
-      const email = profile.emails?.[0]?.value;
-      if (!email) return done(null, false);
+    const email = profile.emails?.[0]?.value;
+    const verified = profile.emails?.[0]?.verified;
+    if (!email || verified === false) return done(null, false);
 
-      const admin = await this.authService.validateGoogleUser(email);
-      done(null, admin);
+    let admin: Admin;
+    try {
+      admin = await this.authService.validateGoogleUser(email);
     } catch {
-      done(null, false);
+      return done(null, false);
     }
+
+    return done(null, admin);
   }
 }
