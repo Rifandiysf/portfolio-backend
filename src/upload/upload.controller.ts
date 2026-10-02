@@ -15,7 +15,7 @@ export class UploadController {
   @Post()
   @UseInterceptors(
     FileInterceptor('file', {
-      limits: { fileSize: 5 * 1024 * 1024 },
+      limits: { fileSize: 4 * 1024 * 1024 },
       fileFilter: (_req, file, cb) =>
         file.mimetype.startsWith('image/')
           ? cb(null, true)
