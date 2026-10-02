@@ -17,6 +17,7 @@ import { TokenPayload } from 'types/auth';
 
 const ACCESS_TTL_MS = 15 * 60 * 1000;
 const REFRESH_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const REFRESH_PATH = process.env.REFRESH_COOKIE_PATH ?? '/api/auth';
 
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
@@ -90,7 +91,7 @@ export class AuthService {
     res.clearCookie('refresh_token', {
       ...this.baseCookie,
       httpOnly: true,
-      path: '/auth',
+      path: REFRESH_PATH,
     });
     res.clearCookie('csrf_token', {
       ...this.baseCookie,
@@ -208,7 +209,7 @@ export class AuthService {
     res.cookie('refresh_token', refreshToken, {
       ...this.baseCookie,
       httpOnly: true,
-      path: '/auth',
+      path: REFRESH_PATH,
       maxAge: REFRESH_TTL_MS,
     });
     res.cookie('csrf_token', randomBytes(24).toString('hex'), {
